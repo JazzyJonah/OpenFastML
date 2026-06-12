@@ -1,0 +1,29 @@
+name: fastml4jets
+channels:
+  - conda-forge
+  - defaults
+  - pip
+dependencies:
+  - python==3.10
+  - pip
+  - pip:
+      - tensorflow[and-cuda]==2.14.1
+      - qkeras
+      - awkward
+      - matplotlib
+      - scikit-learn
+      - pyarrow
+      - pandas
+      - uproot
+      - vector
+      - ipykernel
+      - xgboost
+      - scikit-image
+      - pre-commit
+      - jupyterlab
+      - hls4ml
+      - fastjet
+      - numba
+      - mplhep
+      - keras-tuner
+      - statsmodels
