@@ -2,9 +2,9 @@
 
 Fast machine learning with QKeras for electron and photon classification using open calorimeter data. This project trains a quantised convolutional neural network to classify electron and photon signal objects against jet background objects using small calorimeter-tower images. The model is designed to be lightweight and suitable for fast inference studies.
 
-Run source setup.sh
-This will install a light-weight version of conda and along with all dependencies
-conda activate fastml4jets sets up the environment for this repo
+Run source setup.sh. This will install a light-weight version of conda and along with all dependencies conda activate fastml4jets sets up the environment for this repository.
+
+This repository uses the fastml package for fast tower building and CNN layers (https://cds.cern.ch/record/2941096)
 
 ## Overview
 
