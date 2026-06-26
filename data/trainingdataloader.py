@@ -103,3 +103,7 @@ class OpenDataSet():
 
         val_data = ak.zip(val_data, depth_limit=1)
         ak.to_parquet(val_data, save_path)
+
+if __name__ == "__main__":
+    ods = OpenDataSet()
+    ods.load()

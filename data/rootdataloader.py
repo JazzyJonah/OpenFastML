@@ -5,23 +5,30 @@ import numpy as np
 ROOT.DisableImplicitMT()
 
 from opendataloader import OpenDataLoader
-from rootdatahelper import get_root_data, add_towers
+from rootdatahelper import get_root_data, add_towers, add_seed_vectors, add_truth_vectors
 
 
 
 class RootDataLoader(OpenDataLoader):
     def load(self, n_start = None, n_stop = None):
         config = get_config(self.sample_name)
-        for no_PU in [True, False]:
-            self.df = get_root_data(
-                config,
-                n_start,
-                n_stop,
-                no_PU
-            )
 
-            self.df = add_towers(self.df, no_PU)
-        self._load_seeddata
+        # This dataframe will have the information from both the 
+        # noPU and the normal files, via some Friend hacks
+        self.df = get_root_data(
+            config,
+            n_start,
+            n_stop,
+        )
+
+        self.df = add_towers(self.df)
+
+        self._load_seeddata()
+
+    def _load_seeddata(self):
+        self.df = add_seed_vectors(self.df, self.sample_name)
+        if 'Zee' in self.sample_name:
+            self.df = add_truth_vectors(self.df)
 
 
     def save_to_root(self, save_path):

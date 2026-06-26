@@ -7,8 +7,6 @@ def get_root_data(
         config: dict[str, float | int | str],
         n_start: int,
         n_stop: int,
-        no_PU: bool=False,
-        **kwargs
 ):
     """Get an RDataFrame corresponding to one dataset.
     
@@ -16,20 +14,28 @@ def get_root_data(
     """
 
     path: str = config["dir"]
-    if no_PU:
-        files = [
-            os.path.join(path, f"events{i*10}k_{(i+1)*10}k_noPU.root")
-            for i in range(n_start, n_stop)
-        ]
-    else:
-        files = [
-            os.path.join(path, f"events{i*10}k_{(i+1)*10}k.root")
-            for i in range(n_start, n_stop)
-        ]
+    files = [
+        os.path.join(path, f"events{i*10}k_{(i+1)*10}k.root")
+        for i in range(n_start, n_stop)
+    ]
+    files_noPU = [
+        os.path.join(path, f"events{i*10}k_{(i+1)*10}k_noPU.root")
+        for i in range(n_start, n_stop)
+    ]
+    
+    chain = ROOT.TChain("Delphes")
+    for file in files:
+        chain.Add(file)
+    
+    chain_noPU = ROOT.TChain("Delphes")
+    for file in files_noPU:
+        chain_noPU.Add(file)
+    
+    chain.AddFriend(chain_noPU, "noPU")
 
-    rdf = ROOT.RDataFrame("Delphes", set(files))
+    rdf = ROOT.RDataFrame(chain)
 
-    weightSum = rdf.Sum("Event.Weight").GetValue()
+    weightSum = rdf.Sum("Event.Weight").GetValue() # Only reweigh the non noPU weights
     def _reweight(weight):
         return weight[0] * 1 * 1 / weightSum
 
@@ -39,36 +45,20 @@ def get_root_data(
                 )
     return rdf
 
-def add_tower(
+def add_towers(
         df,
-        noPU: bool,
         eta_edges=np.linspace(-2.5, 2.5, 51),
         phi_edges=np.linspace(-np.pi, np.pi, 65),
 ):
+    for prefix in ["" "noPU."]:
+        df = (
+            df.Define(f"{prefix}eta", _mask, [f"{prefix}Tower.Eta", f"{prefix}Tower.Eta"])
+            .Define(f"{prefix}phi", _mask, [f"{prefix}Tower.Phi", f"{prefix}Tower.Eta"])
+            .Define(f"{prefix}pt_eem", _mask, [f"{prefix}Tower.Eem", f"{prefix}Tower.Eta"])
+            .Define(f"{prefix}pt_ehad", _mask, [f"{prefix}Tower.Ehad", f"{prefix}Tower.Eta"])
+        )
+
     tower_edges = (np.arange(1 + df.Count().GetValue()), eta_edges, phi_edges)
-    df = (
-        df.Define("eta", _mask, ["Tower.Eta", "Tower.Eta"])
-        .Define("phi", _mask, ["Tower.Phi", "Tower.Eta"])
-        .Define("pt_eem", _mask, ["Tower.Eem", "Tower.Eta"])
-        .Define("pt_ehad", _mask, ["Tower.Ehad", "Tower.Eta"])
-    )
-
-    df = df.Define("entry_i64", "static_cast<Long64_t>(rdfentry_)")
-    df = df.Define("event_indices", _indices, ["eta", "entry_i64"])
-
-    # nbins = ROOT.std.vector("int")()
-    # xbins = ROOT.std.vector("std::vector<double>")()
-    # for edge in tower_edges:
-    #     nbins.push_back(len(edge)-1)
-    #     edge_vec = ROOT.std.vector("double")()
-    #     for e in edge:
-    #         edge_vec.push_back(float(e))
-    #     xbins.push_back(edge_vec)
-    # model = ROOT.RDF.THnDModel(
-    #     "_name", "_title", 3,
-    #     nbins, xbins
-    # )
-    # h = df.HistoND(model, ["event_indices", "eta", "phi"], "pt_eem")
     def _histo(eta, phi, pt_eem, pt_ehad):
         n_eta = len(tower_edges[1])-1
         n_phi = len(tower_edges[2])-1 
@@ -83,11 +73,10 @@ def add_tower(
             out[2 * index] += pt_eem[i]
             out[2 * index + 1] += pt_ehad[i]
 
-        return out
-    if noPU:
-        df = df.Define("towers_noPU", _histo, ["eta", "phi", "pt_eem", "pt_ehad"])
-    else:
-        df = df.Define("towers", _histo, ["eta", "phi", "pt_eem", "pt_ehad"])
+        return out # ORDER: [e=0,p=0,ch=0], [e=0,p=0,ch=1], [e=0, p=1, ch=0], ..., [e=49, p=63, ch=1]
+
+    df = df.Define("towers_noPU", _histo, ["noPU.eta", "noPU.phi", "noPU.pt_eem", "noPU.pt_ehad"])
+    df = df.Define("towers", _histo, ["eta", "phi", "pt_eem", "pt_ehad"])
     # towerArray = df.AsNumpy(columns=["tower1"])["tower1"] # Shape 20k, 6400
     return df
 
@@ -97,6 +86,42 @@ def _indices(x, entry):
     return np.full(len(x), entry, dtype=np.int64)
 
 
+def add_seed_vectors(df, sample_name):
+    if 'Zee' in sample_name:
+        selectCol = "towers_noPU"
+    else:
+        selectCol = "towers"
+    print(df.GetColumnType("towers_noPU")) # ROOT::VecOps::RVec<double>
+    df = df.Define("select_pix", _select_pix, [selectCol])
+    # select_pix is at e0*64 + p0
+    # e0 is at select_pix // 64
+    # p0 is at select_pix % 64
+    select_pix_np = df.AsNumpy(columns=["select_pix"])["select_pix"]
+    print(select_pix_np, select_pix_np.shape, np.unique(select_pix_np), np.unique(select_pix_np).shape)
+
+N_E = 50
+N_P = 64
+N_PIX = N_E * N_P
+
+def _select_pix(towers):
+    n = 0
+    for pix in range(50 * 64):
+        if towers[2 * pix] > 10:
+            n += 1
+
+    out = np.empty(n, dtype=np.int64)
+
+    j = 0
+    for pix in range(50 * 64):
+        if towers[2 * pix] > 10:
+            out[j] = pix
+            j += 1
+
+    return out
+
+
+def add_truth_vectors(df):
+    pass
 
 if __name__ == "__main__":
     from fastml.utils.misc import get_config
