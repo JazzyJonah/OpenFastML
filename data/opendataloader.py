@@ -68,8 +68,6 @@ class OpenDataLoader:
         ev_ids = t[:,0]
         e0 = t[:,1]
         p0 = t[:,2]
-        print(np.unique(ev_ids), np.unique(ev_ids).shape)
-        exit()
 
         eta_edges=np.linspace(-2.5, 2.5, 51)
         phi_edges=np.linspace(-np.pi, np.pi, 65)
@@ -94,6 +92,11 @@ class OpenDataLoader:
 
         seed_vectors_mask = self._eta_pt_mask(seed_vectors, min_pt = 10)
         seed_vectors = seed_vectors[seed_vectors_mask]
+        print(sum(seed_vectors.rho.layout.content))
+        exit()
+        seed_vectors.show()
+        print(sum(seed_vectors.rho))
+        print(sum(sum(seed_vectors.rho)))
         self.seed_vectors = seed_vectors[drop_overlapping(seed_vectors)]
         self.seed_vectors.show()
         exit()

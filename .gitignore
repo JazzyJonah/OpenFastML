@@ -6,3 +6,4 @@ conda/
 .env
 *.dat
 raw_data/
+data/trueTesting.py
