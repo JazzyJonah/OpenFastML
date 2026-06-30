@@ -92,14 +92,15 @@ class OpenDataLoader:
 
         seed_vectors_mask = self._eta_pt_mask(seed_vectors, min_pt = 10)
         seed_vectors = seed_vectors[seed_vectors_mask]
-        print(sum(seed_vectors.rho.layout.content))
-        exit()
-        seed_vectors.show()
-        print(sum(seed_vectors.rho))
-        print(sum(sum(seed_vectors.rho)))
+        # print(sum(seed_vectors.rho.layout.content)) 
+        # # 305299.29713344574 for Zee, 1544637.4683074951 for jz 
+        # #         Is JZ close enough? ^Might have some VERY minor differences
+        # exit()
         self.seed_vectors = seed_vectors[drop_overlapping(seed_vectors)]
-        self.seed_vectors.show()
-        exit()
+        print(sum(self.seed_vectors.rho.layout.content)) 
+        # # 302135.3477334976 for zee, 1316729.164387703 for jz
+        # self.seed_vectors.show()
+        # exit()
         if 'Zee' in self.sample_name:
             truth_pt = self.towers_noPU[ev_ids, e0, p0, 0]
             truth_pt = ak.unflatten(truth_pt[sorted_idx], counts)

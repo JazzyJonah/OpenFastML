@@ -94,20 +94,22 @@ def add_seed_vectors(df, sample_name):
     # e0 is at select_pix // 64
     # p0 is at select_pix % 64
 
-    df = df.Define("select_seeds", _eta_pt_mask_pix, ["select_pix", "towers"])
+    df = df.Define("select_seed_pix", _eta_pt_mask_pix, ["select_pix", "towers"])
 
+    def _select_sum(select_pix, towers):
+        return np.sum(towers[2 * select_pix])
+    # df = df.Define("sum_select_seed_pt", _select_sum, ["select_seed_pix", "towers"])
+    # print(df.Sum("sum_select_seed_pt").GetValue()) 
+    # # Prints 305299.29713344574 for zee, which is what we want!
+    # # Prints 1544621.4271774292 for jz; slightly off
 
-    # def _vec_sum(x):
-    #     return np.float64(np.sum(x))
-    # def _pt_at_pix(pix, pt_source):
-    #     # pix is e0 * 64 + p0
-    #     # pt channel is ch=0, so flat index is 2 * pix
-    #     return pt_source[2 * pix]
-    # df = (
-    # df.Define("select_seed_pt", _pt_at_pix, ["select_seeds", "towers"])
-    #     .Define("sum_select_seed_pt", _vec_sum, ["select_seed_pt"])
-    # )
-    # print(df.Sum("sum_select_seed_pt").GetValue()) # 305299.29713344574
+    df = df.Define("dropped_seed_pix", _drop_overlapping, ["select_seed_pix", "towers"])
+    
+    df = df.Define("sum_dropped_seed_pt", _select_sum, ["dropped_seed_pix", "towers"])
+    print(df.Sum("sum_dropped_seed_pt").GetValue())
+    # Prints 302164.2581586838 for zee, which is almost exactly correct 
+    # (I'll chalk it to a rounding error that was present in the 
+    # original code that could cause bad things to happen)
 
 
 
@@ -128,8 +130,51 @@ def _eta_pt_mask_pix(select_pix, towers):
 
     return select_pix[mask]
 
+def _drop_overlapping(seed_pix, pt_source):
+    m = len(seed_pix)
 
+    if m == 0:
+        return np.empty(0, dtype=np.int64)
 
+    keep = np.ones(m, dtype=np.bool_)
+
+    for i in range(m):
+        pix_i = seed_pix[i]
+        e_i = pix_i // 64
+        p_i = pix_i % 64
+        pt_i = pt_source[2 * pix_i]
+
+        for j in range(m):
+            if i == j:
+                continue
+
+            pix_j = seed_pix[j]
+            e_j = pix_j // 64
+            p_j = pix_j % 64
+
+            if abs(e_i - e_j) > 2 or abs(p_i - p_j) > 2:
+                continue
+
+            pt_j = pt_source[2 * pix_j]
+
+            if pt_j > pt_i or (pt_j == pt_i and j < i):
+                keep[i] = False
+                break
+
+    n_keep = 0
+    for i in range(m):
+        if keep[i]:
+            n_keep += 1
+
+    out = np.empty(n_keep, dtype=np.int64)
+
+    k = 0
+    for i in range(m):
+        if keep[i]:
+            out[k] = seed_pix[i]
+            k += 1
+
+    return out
 
 
 

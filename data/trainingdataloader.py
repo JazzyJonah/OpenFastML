@@ -46,7 +46,7 @@ class OpenDataSet():
             dl.weight = ak.to_numpy(ak.flatten(w))
             towers_dict[sample_name] = towers
             loaders[sample_name] = dl
-
+        exit()
         return loaders, towers_dict
 
     def load(self):
