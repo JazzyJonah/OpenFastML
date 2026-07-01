@@ -110,6 +110,7 @@ def add_seed_vectors(df, sample_name):
     # Prints 302164.2581586838 for zee, which is almost exactly correct 
     # (I'll chalk it to a rounding error that was present in the 
     # original code that could cause bad things to happen)
+    # Prints 1544621.4271774292 for jz; slightly off
 
 
 

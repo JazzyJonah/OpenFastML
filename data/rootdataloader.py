@@ -40,7 +40,7 @@ class RootDataLoader(OpenDataLoader):
 
 
 if __name__=="__main__":
-    # dl = RootDataLoader("Zee")
-    # dl.load(n_start=0, n_stop=2)
+    dl = RootDataLoader("Zee")
+    dl.load(n_start=0, n_stop=2)
     dl = RootDataLoader("JZ")
     dl.load(n_start=0, n_stop=1)
