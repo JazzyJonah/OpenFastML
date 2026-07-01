@@ -3,7 +3,7 @@ from fastml.utils.misc import get_config
 import numpy as np
 
 from opendataloader import OpenDataLoader
-from rootdatahelper import get_root_data, add_towers, add_seed_vectors, add_truth_vectors
+from rootdatahelper import get_root_data, add_towers, add_seed_and_truth_vectors
 
 
 
@@ -22,9 +22,7 @@ class RootDataLoader(OpenDataLoader):
         self._load_seeddata()
 
     def _load_seeddata(self):
-        self.df = add_seed_vectors(self.df, self.sample_name)
-        if 'Zee' in self.sample_name:
-            self.df = add_truth_vectors(self.df)
+        self.df = add_seed_and_truth_vectors(self.df, self.sample_name)
 
 
     def save_to_root(self, save_path):

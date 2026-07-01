@@ -95,18 +95,21 @@ class OpenDataLoader:
         # print(sum(seed_vectors.rho.layout.content)) 
         # # 305299.29713344574 for Zee, 1544637.4683074951 for jz 
         # #         Is JZ close enough? ^Might have some VERY minor differences
-        # exit()
+        
         self.seed_vectors = seed_vectors[drop_overlapping(seed_vectors)]
-        print(sum(self.seed_vectors.rho.layout.content)) 
+        # print(sum(self.seed_vectors.rho.layout.content)) 
         # # 302135.3477334976 for zee, 1316729.164387703 for jz
-        # self.seed_vectors.show()
-        # exit()
+
+        
         if 'Zee' in self.sample_name:
             truth_pt = self.towers_noPU[ev_ids, e0, p0, 0]
             truth_pt = ak.unflatten(truth_pt[sorted_idx], counts)
             truth_vectors = self._load_truthdata(truth_pt, eta, phi)
             truth_vectors = truth_vectors[seed_vectors_mask]
             self.truth_vectors = truth_vectors[drop_overlapping(truth_vectors)]
+            
+            # print(sum(self.truth_vectors.rho.layout.content))
+            # # 295083.5315389633
 
     def _load_truthdata(self, truth_pt, eta, phi):
         return vector.zip({

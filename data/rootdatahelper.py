@@ -84,7 +84,7 @@ def _mask(x, eta):
     return x[np.abs(eta) <= 2.5]
 
 
-def add_seed_vectors(df, sample_name):
+def add_seed_and_truth_vectors(df, sample_name):
     if 'Zee' in sample_name:
         selectCol = "towers_noPU"
     else:
@@ -96,8 +96,7 @@ def add_seed_vectors(df, sample_name):
 
     df = df.Define("select_seed_pix", _eta_pt_mask_pix, ["select_pix", "towers"])
 
-    def _select_sum(select_pix, towers):
-        return np.sum(towers[2 * select_pix])
+
     # df = df.Define("sum_select_seed_pt", _select_sum, ["select_seed_pix", "towers"])
     # print(df.Sum("sum_select_seed_pt").GetValue()) 
     # # Prints 305299.29713344574 for zee, which is what we want!
@@ -105,12 +104,19 @@ def add_seed_vectors(df, sample_name):
 
     df = df.Define("dropped_seed_pix", _drop_overlapping, ["select_seed_pix", "towers"])
     
-    df = df.Define("sum_dropped_seed_pt", _select_sum, ["dropped_seed_pix", "towers"])
-    print(df.Sum("sum_dropped_seed_pt").GetValue())
-    # Prints 302164.2581586838 for zee, which is almost exactly correct 
-    # (I'll chalk it to a rounding error that was present in the 
-    # original code that could cause bad things to happen)
-    # Prints 1544621.4271774292 for jz; slightly off
+    # df = df.Define("sum_dropped_seed_pt", _select_sum, ["dropped_seed_pix", "towers"])
+    # print(df.Sum("sum_dropped_seed_pt").GetValue())
+    # # Prints 302164.2581586838 for zee, which is almost exactly correct 
+    # # (I'll chalk it to a rounding error that was present in the 
+    # # original code that could cause bad things to happen)
+    # # Prints 1544621.4271774292 for jz; slightly off
+    if sample_name == "Zee":
+        df = df.Define("truth_pix", _drop_overlapping, ["select_seed_pix", "towers_noPU"])
+
+        # df = df.Define("sum_truth_pt", _select_sum, ["truth_pix", "towers_noPU"])
+        # print(df.Sum("sum_truth_pt").GetValue())
+        # # Prints 295109.65280246735
+
 
 
 
@@ -176,11 +182,11 @@ def _drop_overlapping(seed_pix, pt_source):
             k += 1
 
     return out
+    
 
-
-
-def add_truth_vectors(df):
-    pass
+# For debugging only pretty much
+def _select_sum(select_pix, towers):
+    return np.sum(towers[2 * select_pix])
 
 if __name__ == "__main__":
     from fastml.utils.misc import get_config
