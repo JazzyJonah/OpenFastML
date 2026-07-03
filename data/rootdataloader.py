@@ -3,27 +3,29 @@ from fastml.utils.misc import get_config
 import numpy as np
 
 from opendataloader import OpenDataLoader
-from rootdatahelper import get_root_data, add_towers, add_seed_and_truth_vectors
+from rootdatahelper import (get_root_data, 
+                            add_towers, 
+                            add_seed_and_truth_vectors
+                            )
 
 
 
 class RootDataLoader(OpenDataLoader):
-    def load(self, n_start = None, n_stop = None):
+    def load(self, thresholds, n_start = None, n_stop = None):
         config = get_config(self.sample_name)
 
-
-        self.df, _ = get_root_data(
+        self.df, self._temp = get_root_data(
             config,
             n_start,
             n_stop,
         )
         self.df = add_towers(self.df)
 
-        self._load_seeddata()
+        self._load_seeddata(thresholds)
 
-    def _load_seeddata(self):
-        self.df = add_seed_and_truth_vectors(self.df, self.sample_name)
-
+    def _load_seeddata(self, thresholds):
+        self.df = add_seed_and_truth_vectors(self.df, self.sample_name, thresholds)
+        
 
     def save_to_root(self, save_path):
         print(len(self.x_train))

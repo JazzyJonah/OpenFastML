@@ -46,13 +46,15 @@ class OpenDataSet():
             dl.weight = ak.to_numpy(ak.flatten(w))
             towers_dict[sample_name] = towers
             loaders[sample_name] = dl
-        exit()
         return loaders, towers_dict
 
     def load(self):
         loaders, towers_dict = self.load_raw_data()
 
         training_tower_dist, training_pt_dist = filter_training(loaders, towers_dict, self.thresholds)
+
+        print("JZ towers:", training_tower_dist["JZ"].shape)
+        print("Zee towers:", training_tower_dist["Zee"].shape)
 
         X_bkg = training_tower_dist['JZ'] 
 
@@ -69,6 +71,9 @@ class OpenDataSet():
         X = np.concatenate([X_sig, X_bkg], axis=0)
         y = np.concatenate([y_sig, y_bkg], axis=0)
         w = np.concatenate([w_sig, w_bkg], axis=0)
+        print("X:", X.shape)
+        print("y:", y.shape)
+        print("w:", w.shape)
 
         X_cnn_train, X_cnn_test, y_train, y_test, w_train, w_test = train_test_split(
             X,
@@ -77,6 +82,7 @@ class OpenDataSet():
             test_size=0.2,
             random_state=101,
         )
+        print("x_train:", X_cnn_train.shape)
 
         self.x_train = X_cnn_train
         self.y_train = y_train

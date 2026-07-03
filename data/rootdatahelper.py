@@ -84,7 +84,7 @@ def _mask(x, eta):
     return x[np.abs(eta) <= 2.5]
 
 
-def add_seed_and_truth_vectors(df, sample_name):
+def add_seed_and_truth_vectors(df, sample_name, thresholds):
     if 'Zee' in sample_name:
         selectCol = "towers_noPU"
     else:
@@ -110,18 +110,43 @@ def add_seed_and_truth_vectors(df, sample_name):
     # # (I'll chalk it to a rounding error that was present in the 
     # # original code that could cause bad things to happen)
     # # Prints 1544621.4271774292 for jz; slightly off
-    if sample_name == "Zee":
+
+    df = df.Define("dropped_seed_pt", _pt_at_pix, ["dropped_seed_pix", "towers"])
+
+    
+    if sample_name == "Zee": # I don't think this is ever used.
         df = df.Define("truth_pix", _drop_overlapping, ["select_seed_pix", "towers_noPU"])
 
         # df = df.Define("sum_truth_pt", _select_sum, ["truth_pix", "towers_noPU"])
         # print(df.Sum("sum_truth_pt").GetValue())
         # # Prints 295109.65280246735
 
+        df = df.Define("truth_seed_pt", _pt_at_pix, ["truth_pix", "towers_noPU"])
 
+    lo = np.asarray([x[0] for x in thresholds])
+    hi = np.asarray([x[1] for x in thresholds])
+    n_bins = len(thresholds)
+    last = n_bins - 1
+    def _seed_bin_counts(pt):
+        counts = np.zeros(n_bins, dtype=np.int64)
+        for v in pt:
+            for b in range(n_bins):
+                if b == last:
+                    in_bin = (v >= lo[b]) and (v <= hi[b])
+                else:
+                    in_bin = (v >= lo[b]) and (v < hi[b])
 
+                if in_bin:
+                    counts[b] += 1
+                    break
+        return counts
+    df = df.Define("seed_bin_counts", _seed_bin_counts, ["dropped_seed_pt"])
+
+    return df
 
 def _select_pix(towers):
     return np.flatnonzero(towers[0::2] > 10)
+
 
 eta_edges = np.linspace(-2.5, 2.5, 51)[:-1] # Exclude the 2.5, it's never used in the original
 # NOTE: I believe in theory -2.5 should be used, but in the original implementation, it's actually cut out by the mask 
@@ -137,7 +162,7 @@ def _eta_pt_mask_pix(select_pix, towers):
 
     return select_pix[mask]
 
-def _drop_overlapping(seed_pix, pt_source):
+def _drop_overlapping(seed_pix, towers):
     m = len(seed_pix)
 
     if m == 0:
@@ -149,7 +174,7 @@ def _drop_overlapping(seed_pix, pt_source):
         pix_i = seed_pix[i]
         e_i = pix_i // 64
         p_i = pix_i % 64
-        pt_i = pt_source[2 * pix_i]
+        pt_i = towers[2 * pix_i]
 
         for j in range(m):
             if i == j:
@@ -162,7 +187,7 @@ def _drop_overlapping(seed_pix, pt_source):
             if abs(e_i - e_j) > 2 or abs(p_i - p_j) > 2:
                 continue
 
-            pt_j = pt_source[2 * pix_j]
+            pt_j = towers[2 * pix_j]
 
             if pt_j > pt_i or (pt_j == pt_i and j < i):
                 keep[i] = False
@@ -181,8 +206,17 @@ def _drop_overlapping(seed_pix, pt_source):
             out[k] = seed_pix[i]
             k += 1
 
-    return out
-    
+    return out    
+
+def _pt_at_pix(seed_pix, towers):
+    return towers[2 * seed_pix]
+
+
+def _make_get_bin_count(i):
+    def _get_bin_count(counts):
+        return counts[i]
+    return _get_bin_count
+
 
 # For debugging only pretty much
 def _select_sum(select_pix, towers):
