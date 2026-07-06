@@ -26,9 +26,6 @@ def filter_training(loaders, towers_dict, thresholds):
 
         zee_counts.append(len(idx_in_bin['Zee']))
         bkg_avail_counts.append(len(idx_in_bin['JZ']))
-    print("OLD Zee counts:", np.array(zee_counts, dtype=int))
-    print("OLD JZ counts: ", np.array(bkg_avail_counts, dtype=int))
-    exit()
 
     zee_counts = np.array(zee_counts, dtype=int)
     bkg_avail_counts = np.array(bkg_avail_counts, dtype=int)
@@ -52,6 +49,9 @@ def filter_training(loaders, towers_dict, thresholds):
 
         cap = int(np.floor(cap_factor * neigh_mean))
         smoothed_target[i] = min(raw_target[i], cap)
+
+    print(smoothed_target)
+    exit()
 
     rng = np.random.default_rng(123) 
 

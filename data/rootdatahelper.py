@@ -2,6 +2,10 @@ import os
 import ROOT
 import numpy as np
 
+N_ETA = 50
+N_PHI = 64
+N_CH = 2
+
 
 def get_root_data(
         config: dict[str, float | int | str],
@@ -35,32 +39,35 @@ def get_root_data(
 
     rdf = ROOT.RDataFrame(chain)
 
-    weightSum = rdf.Sum("Event.Weight").GetValue() # Only reweight the non noPU weights
-    def _reweight(weight):
-        return weight[0] * 1 * 1 / weightSum
+    # weightSum = rdf.Sum("Event.Weight").GetValue() # Only reweight the non noPU weights
+    # def _reweight(weight):
+    #     return weight[0] * 1 * 1 / weightSum
 
-    rdf = rdf.Define("EventWeight", 
-                    _reweight,
-                    ["Event.Weight"]
-                )
+    # rdf = rdf.Define("EventWeight", 
+    #                 _reweight,
+    #                 ["Event.Weight"]
+    #             )
     return rdf, chain_noPU
 
 def add_towers(
         df,
-        eta_edges=np.linspace(-2.5, 2.5, 51),
-        phi_edges=np.linspace(-np.pi, np.pi, 65),
+        eta_edges=np.linspace(-2.5, 2.5, N_ETA+1),
+        phi_edges=np.linspace(-np.pi, np.pi, N_PHI+1),
 ):
     tower_edges = (np.arange(1 + df.Count().GetValue()), eta_edges, phi_edges)
     def _histo(eta, phi, pt_eem, pt_ehad):
-        n_eta = len(tower_edges[1])-1
-        n_phi = len(tower_edges[2])-1 
-        out = np.zeros((n_eta * n_phi * 2), dtype=np.float64)
+        out = np.zeros((N_ETA * N_PHI * 2), dtype=np.float64)
 
         for i in range(len(eta)):
             eta_bin = np.searchsorted(tower_edges[1], eta[i], side="right") - 1
             phi_bin = np.searchsorted(tower_edges[2], phi[i], side="right") - 1
 
-            index = eta_bin * n_phi + phi_bin
+            if eta_bin > N_ETA - 1:
+                eta_bin = N_ETA - 1
+            if phi_bin > N_PHI - 1:
+                phi_bin = N_PHI - 1
+
+            index = eta_bin * N_PHI + phi_bin
 
             out[2 * index] += pt_eem[i]
             out[2 * index + 1] += pt_ehad[i]
@@ -123,24 +130,26 @@ def add_seed_and_truth_vectors(df, sample_name, thresholds):
 
         df = df.Define("truth_seed_pt", _pt_at_pix, ["truth_pix", "towers_noPU"])
 
-    lo = np.asarray([x[0] for x in thresholds])
-    hi = np.asarray([x[1] for x in thresholds])
-    n_bins = len(thresholds)
-    last = n_bins - 1
-    def _seed_bin_counts(pt):
-        counts = np.zeros(n_bins, dtype=np.int64)
-        for v in pt:
-            for b in range(n_bins):
-                if b == last:
-                    in_bin = (v >= lo[b]) and (v <= hi[b])
-                else:
-                    in_bin = (v >= lo[b]) and (v < hi[b])
+    # lo = np.asarray([x[0] for x in thresholds])
+    # hi = np.asarray([x[1] for x in thresholds])
+    # n_bins = len(thresholds)
+    # last = n_bins - 1
+    # def _seed_bin_counts(pt):
+    #     counts = np.zeros(n_bins, dtype=np.int64)
+    #     for v in pt:
+    #         for b in range(n_bins):
+    #             if b == last:
+    #                 in_bin = (v >= lo[b]) and (v <= hi[b])
+    #             else:
+    #                 in_bin = (v >= lo[b]) and (v < hi[b])
 
-                if in_bin:
-                    counts[b] += 1
-                    break
-        return counts
-    df = df.Define("seed_bin_counts", _seed_bin_counts, ["dropped_seed_pt"])
+    #             if in_bin:
+    #                 counts[b] += 1
+    #                 break
+    #     return counts
+    # df = df.Define("seed_bin_counts", _seed_bin_counts, ["dropped_seed_pt"])
+    
+    df = df.Define("seed_x_bank", _seed_x_bank, ["dropped_seed_pix", "towers"])
 
     return df
 
@@ -148,15 +157,15 @@ def _select_pix(towers):
     return np.flatnonzero(towers[0::2] > 10)
 
 
-eta_edges = np.linspace(-2.5, 2.5, 51)[:-1] # Exclude the 2.5, it's never used in the original
+eta_edges = np.linspace(-2.5, 2.5, N_ETA+1)[:-1] # Exclude the 2.5, it's never used in the original
 # NOTE: I believe in theory -2.5 should be used, but in the original implementation, it's actually cut out by the mask 
 def _eta_pt_mask_pix(select_pix, towers):
     min_pt = 10
-    e0 = select_pix // 64
+    e0 = select_pix // N_PHI
     eta = eta_edges[e0] # Equivalent to  np.tile(eta_edges, (len(self.towers), 1))[ev_ids, e0] 
     abs_eta = np.abs(eta)
 
-    pt = towers[2 * select_pix]
+    pt = towers[N_CH * select_pix]
 
     mask = ((abs_eta < 2.5) & (pt > min_pt) & ((abs_eta < 1.37) | (abs_eta > 1.52)))
 
@@ -209,13 +218,31 @@ def _drop_overlapping(seed_pix, towers):
     return out    
 
 def _pt_at_pix(seed_pix, towers):
-    return towers[2 * seed_pix]
+    return towers[N_CH * seed_pix]
+
+SEED_SIZE = 3 * 3 * 2
+def _seed_x_bank(seed_pix, towers):
+    out = np.zeros(len(seed_pix) * SEED_SIZE, dtype=np.float64)
+
+    currIndex = 0
+    for pix in seed_pix:
+        e0 = pix // N_PHI
+        p0 = pix % N_PHI
+
+        for dEta in range(-1, 2):
+            e = e0 + dEta
+
+            for dPhi in range(-1, 2):
+                p = (p0 + dPhi) % N_PHI # Phi wraps
+                if 0 <= e < N_ETA: # Eta pads with zeros, for some reason
+                    towerIndex = N_CH * (e * N_PHI + p)
+                    out[currIndex] = towers[towerIndex]
+                    out[currIndex+1] = towers[towerIndex + 1]
+                currIndex += 2 # In case the above if statement is false, zero pad
+    
+    return out
 
 
-def _make_get_bin_count(i):
-    def _get_bin_count(counts):
-        return counts[i]
-    return _get_bin_count
 
 
 # For debugging only pretty much
