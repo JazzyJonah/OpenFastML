@@ -5,13 +5,10 @@ import numpy as np
 from opendataloader import OpenDataLoader
 from rootdatahelper import (get_root_data, 
                             add_towers, 
-                            add_seed_and_truth_vectors
-                            )
-
-
+                            add_seed_and_truth_vectors)
 
 class RootDataLoader(OpenDataLoader):
-    def load(self, thresholds, n_start = None, n_stop = None):
+    def load(self, n_start = None, n_stop = None):
         config = get_config(self.sample_name)
 
         self.df, self._temp = get_root_data(
@@ -21,23 +18,11 @@ class RootDataLoader(OpenDataLoader):
         )
         self.df = add_towers(self.df)
 
-        self._load_seeddata(thresholds)
+        self._load_seeddata()
 
-    def _load_seeddata(self, thresholds):
-        self.df = add_seed_and_truth_vectors(self.df, self.sample_name, thresholds)
+    def _load_seeddata(self):
+        self.df = add_seed_and_truth_vectors(self.df, self.sample_name)
         
-
-    def save_to_root(self, save_path):
-        print(len(self.x_train))
-        return
-        train_df = ROOT.RDataFrame(len(self.x_train))
-        train_data = {
-            "x_train": self.x_train,
-            "y_train": self.y_train,
-            "w_train": self.w_train
-        }
-
-
 
 if __name__=="__main__":
     dl = RootDataLoader("Zee")

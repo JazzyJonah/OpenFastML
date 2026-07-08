@@ -50,9 +50,6 @@ def filter_training(loaders, towers_dict, thresholds):
         cap = int(np.floor(cap_factor * neigh_mean))
         smoothed_target[i] = min(raw_target[i], cap)
 
-    print(smoothed_target)
-    exit()
-
     rng = np.random.default_rng(123) 
 
     training_pt_dist_lists = {s: [] for s in samples}

@@ -1,8 +1,16 @@
 from trainingdataloader import OpenDataSet
 from rootdataloader import RootDataLoader
+from roottrainingdatahelper import (_group_sample_into_threshold_bins,
+                                    _convert_loader_to_awkward,
+                                    _rechunk_seed_x,
+                                    add_signal_background_counts,
+                                    add_smooth_raw_targets,
+                                    add_final_seeds)
+from trainingdatahelper import calculate_weights
 
-import numpy as np
 import awkward as ak
+import numpy as np
+from time import time, sleep
 
 class RootDataSet(OpenDataSet):
     def load_raw_data(self) -> None:
@@ -13,160 +21,96 @@ class RootDataSet(OpenDataSet):
             dl = RootDataLoader(sample_name)
             stop = 2 if 'Zee' == sample_name else 1
 
-            dl.load(self.thresholds, n_start=0, n_stop=stop)
+            dl.load(n_start=0, n_stop=stop)
 
             self.loaders[sample_name] = dl
     
 
-    def load(self):
+    def load(self) -> None:
+        t = time()
         self.load_raw_data()
-        print("Loaded raw data")
+        print(f"[{time()-t:.2f}] Loaded raw data")
 
-        self.convert_loaders_to_awkward()
-        print("Converted loaders to awkward")
+        self.arrays_by_sample = self.convert_loaders_to_awkward()
+        print(f"[{time()-t:.2f}] Converted loaders to Awkward arrays")
 
-        self.rechunk_seed_x_by_sample()
-        print("Rechunked seed_x by sample")
+        self.arrays_by_sample = self.rechunk_seed_x_by_sample()
+        print(f"[{time()-t:.2f}] Rechunked seed_x by sample")
 
-        self.group_samples_into_threshold_bins()
-        print("Grouped samples into threshold bins")
+        self.binned_by_sample = self.group_samples_into_threshold_bins()
+        print(f"[{time()-t:.2f}] Grouped samples into threshold bins")
 
-        self.build_binned_table()
-        print("Built binned table")
+        self.binned_table = self.build_binned_table()
+        print(f"[{time()-t:.2f}] Built binned table")
 
-        self.make_binned_df()
-        print("Made binned RDataFrame")
+        self.binned_df = self.make_binned_df()
+        print(f"[{time()-t:.2f}] Made binned RDataFrame")
 
+        self.binned_df = add_signal_background_counts(self.binned_df)
+        print(f"[{time()-t:.2f}] Added signal and background counts")
 
-    def convert_loaders_to_awkward(self):
-        self.arrays_by_sample = {
-            sample_name: self._convert_loader_to_awkward(sample_name) 
+        self.binned_df = add_smooth_raw_targets(self.binned_df)
+        print(f"[{time()-t:.2f}] Added raw and smoothed targets")
+
+        self.binned_df = add_final_seeds(self.binned_df)
+        print(f"[{time()-t:.2f}] Added final seeds")
+
+        self.selected_binned_array = self.selected_binned_df_to_awkward()
+        print(f"[{time()-t:.2f}] Converted selected binned RDataFrame to Awkward")
+
+        self.final_seed_table = self.make_final_seed_table()
+        print(f"[{time()-t:.2f}] Made final seed table")
+
+        self.final_df = self.make_final_df()
+        print(f"[{time()-t:.2f}] Made final RDataFrame")
+    
+
+    def save_to_root(self, savepath, treename="tree") -> None:
+        self.final_df.Display().Print()
+        sleep(10)
+        try:
+            self.final_df.Snapshot(treename, savepath)
+            print("Worked")
+        except:
+            print("Poo")
+        print(f"Saved final data to {savepath}! Whoo!")
+    
+    
+    def convert_loaders_to_awkward(self) -> dict[str, ak.Array]:
+        """Convert loaders to a dictionary of Awkward arrays and return"""
+        return {
+            sample_name: _convert_loader_to_awkward(self.loaders[sample_name].df) 
             for sample_name in ("Zee", "JZ")}
     
-    def _convert_loader_to_awkward(self, sample_name):
-        loader = self.loaders[sample_name]
-        columns = (
-            "dropped_seed_pix",
-            "dropped_seed_pt",
-            "seed_x_bank"
-        )
-        return ak.from_rdataframe(
-            loader.df,
-            columns=columns,
-            keep_order=True
-        )
     
-    
-    def rechunk_seed_x_by_sample(self):
-        self.arrays_by_sample = {
-            sample: self._rechunk_seed_x(arr)
+    def rechunk_seed_x_by_sample(self) -> dict[str, ak.Array]:
+        """Add "seed_x" field, chunked in 18-length segments, \
+            to self.arrays_by_sample[s] and return"""
+        return {
+            sample: _rechunk_seed_x(arr)
             for sample, arr in self.arrays_by_sample.items()}
     
-    def _rechunk_seed_x(self, arr):
-        """
-        Add arr.seed_x with structure:
 
-            event -> seed -> 18 values
-
-        starting from arr.seed_x_bank with structure:
-
-            event -> flat vector of length 18 * n_seeds
-        """
-
-        seed_x = ak.unflatten(arr.seed_x_bank, 3 * 3 * 2, axis=1)
-        seed_x = ak.to_regular(seed_x, axis=2)
-
-        return ak.with_field(arr, seed_x, "seed_x")
-    
-
-    def group_samples_into_threshold_bins(self):
-        self.binned_by_sample = {
-            sample: self._group_sample_into_threshold_bins(arr)
+    def group_samples_into_threshold_bins(self) -> dict[str, ak.Array]:
+        """Create and return dict of len(self.thresholds), e.g. 60,-length ]
+            Awkward array with the following fields: "seeds", "pt", "pix"."""
+        return {
+            sample: _group_sample_into_threshold_bins(arr, self.thresholds)
             for sample, arr in self.arrays_by_sample.items()}
 
-    def _group_sample_into_threshold_bins(self, arr):
-        """
-        Input arr fields:
-            dropped_seed_pix: event -> seed
-            dropped_seed_pt:  event -> seed
-            seed_x:           event -> seed -> 18
-
-        Output:
-            binned: threshold_bin -> {
-                seeds: variable number of 18-vectors,
-                pt:    variable number of floats,
-                pix:   variable number of ints
-            }
-
-        Outer length = len(self.thresholds), e.g. 60.
-        """
-
-        n_bins = len(self.thresholds)
-
-        # Flatten only the event dimension.
-        # Keep seed_x as seed -> 18.
-        pt_flat = ak.to_numpy(ak.flatten(arr.dropped_seed_pt, axis=1))
-        pix_flat = ak.to_numpy(ak.flatten(arr.dropped_seed_pix, axis=1))
-        x_flat = ak.flatten(arr.seed_x, axis=1)
-
-        # Build threshold edges from [(lo0, hi0), (lo1, hi1), ...]
-        edges = np.asarray(
-            [self.thresholds[0][0]] + [hi for _, hi in self.thresholds],
-            dtype=np.float64,
-        )
-
-        # Same convention as original:
-        # normal bins: [lo, hi)
-        # final bin:  [lo, hi]
-        bin_id = np.searchsorted(edges, pt_flat, side="right") - 1
-
-        # Include exact final upper edge in final bin.
-        bin_id[pt_flat == edges[-1]] = n_bins - 1
-
-        valid = (bin_id >= 0) & (bin_id < n_bins)
-
-        pt_valid = pt_flat[valid]
-        pix_valid = pix_flat[valid]
-        x_valid = x_flat[valid]
-        bin_valid = bin_id[valid]
-
-        # Group by threshold bin.
-        order = np.argsort(bin_valid, kind="stable")
-
-        pt_sorted = pt_valid[order]
-        pix_sorted = pix_valid[order]
-        x_sorted = x_valid[order]
-        bin_sorted = bin_valid[order]
-
-        counts = np.bincount(bin_sorted, minlength=n_bins)
-
-        binned_pt = ak.unflatten(pt_sorted, counts)
-        binned_pix = ak.unflatten(pix_sorted, counts)
-        binned_seeds = ak.unflatten(x_sorted, counts)
-
-        return ak.zip(
-            {
-                "seeds": binned_seeds,
-                "pt": binned_pt,
-                "pix": binned_pix,
-            },
-            depth_limit=1,
-        )
-    
-
-    def build_binned_table(self):
-        sig = self.binned_by_sample["Zee"]
+    def build_binned_table(self) -> ak.Array:
+        """Create and return len(self.thresholds), e.g. 60,-length\
+            Awkward array with all fields necessary for second RDF
+            
+            return fields: "signal_seeds", "background_seeds", \
+                "signal_pt", "background_pt", signal_pix", "background_pix"."""
+        sig = self.binned_by_sample["Zee"] # sig.seeds is 60*var*18
         bkg = self.binned_by_sample["JZ"]
 
-        # Each `*.seeds` is currently:
-        #     threshold_bin -> seed -> 18
-        #
-        # Flatten only the seed->18 level, so each threshold bin has:
-        #     threshold_bin -> flat length 18 * n_seeds
-        signal_seeds = ak.flatten(sig.seeds, axis=2)
-        background_seeds = ak.flatten(bkg.seeds, axis=2)
+        signal_seeds = ak.flatten(sig.seeds, axis=2) #signal_seeds is 60*var
+        background_seeds = ak.flatten(bkg.seeds, axis=2) # with var % 18 == 0
 
-        self.binned_table = ak.Array({
+        return ak.Array({
             "signal_seeds": signal_seeds,
             "background_seeds": background_seeds,
 
@@ -180,36 +124,74 @@ class RootDataSet(OpenDataSet):
 
 
     def make_binned_df(self):
-        if not hasattr(self, "binned_table"):
-            self.build_binned_table()
-
-        self.binned_df = ak.to_rdataframe({
+        """Return an RDataFrame with the following columns: \
+        "signal_seeds", "background_seeds", "signal_pt", \
+            "background_pt", signal_pix", "background_pix"."""
+        
+        return ak.to_rdataframe({
             "signal_seeds": self.binned_table.signal_seeds,
             "background_seeds": self.binned_table.background_seeds,
             "signal_pt": self.binned_table.signal_pt,
             "background_pt": self.binned_table.background_pt,
             "signal_pix": self.binned_table.signal_pix,
             "background_pix": self.binned_table.background_pix,
-        })        
+        })
 
-
-    def _sum_seed_bin_contents(self, sample_name):
-        df = self.loaders[sample_name].df
-        totals = []
-        for i in range(len(self.thresholds)):
-            col = f"seed_bin_count_{i}"
-            df_i = df.Define(
-                col,
-                f"seed_bin_counts[{i}]"
-            )
-            totals.append(df_i.Sum(col))
-
-        return np.asarray(
-            [total.GetValue() for total in totals], 
-            dtype=np.int64
+    def selected_binned_df_to_awkward(self) -> ak.Array:
+        """Return an Awkward array with the following fields: \
+        "final_signal_seeds", "final_background_seeds", \
+            "final_signal_pt", "final_background_pt"."""
+        
+        return ak.from_rdataframe(
+            self.binned_df,
+            columns=[
+                "final_signal_seeds",
+                "final_background_seeds",
+                "final_signal_pt",
+                "final_background_pt"
+            ],
+            keep_order=True
         )
     
+    def make_final_seed_table(self) -> ak.Array:
+        """Return final seed table, ready to export back to \
+            RDF for snapshotting. Fields: "x", "weight", "label"."""
+        
+        arr=self.selected_binned_array
+
+        sig_x = ak.flatten(
+            ak.unflatten(arr.final_signal_seeds, 18, axis=1),
+            axis=1)
+        bkg_x = ak.flatten(
+            ak.unflatten(arr.final_background_seeds, 18, axis=1),
+            axis=1)
+
+        sig_pt = ak.flatten(arr.final_signal_pt, axis=1)
+        bkg_pt = ak.flatten(arr.final_background_pt, axis=1)
+        sig_w = calculate_weights(sig_pt, self.bin_edges)
+        bkg_w = calculate_weights(bkg_pt, self.bin_edges)
+
+        sig_table = ak.Array({
+            "x": sig_x,
+            "y": np.ones(len(sig_pt)),
+            "w": sig_w
+        })
+        bkg_table = ak.Array({
+            "x": bkg_x,
+            "y": np.zeros(len(bkg_pt)),
+            "w": bkg_w
+        })
+
+        return ak.concatenate([sig_table, bkg_table], axis=0)
+    
+    def make_final_df(self):
+        return ak.to_rdataframe({
+            "x": self.final_seed_table.x,
+            "y": self.final_seed_table.y,
+            "w": self.final_seed_table.w
+        })
 
 if __name__ == "__main__":
     rds = RootDataSet()
     rds.load()
+    rds.save_to_root("raw_data/processed_root_data.root")

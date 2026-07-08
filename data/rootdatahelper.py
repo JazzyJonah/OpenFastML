@@ -39,14 +39,6 @@ def get_root_data(
 
     rdf = ROOT.RDataFrame(chain)
 
-    # weightSum = rdf.Sum("Event.Weight").GetValue() # Only reweight the non noPU weights
-    # def _reweight(weight):
-    #     return weight[0] * 1 * 1 / weightSum
-
-    # rdf = rdf.Define("EventWeight", 
-    #                 _reweight,
-    #                 ["Event.Weight"]
-    #             )
     return rdf, chain_noPU
 
 def add_towers(
@@ -83,15 +75,13 @@ def add_towers(
             .Define(f"towers{suffix}", _histo, [f"eta{suffix}", f"phi{suffix}", f"pt_eem{suffix}", f"pt_ehad{suffix}"])
         )
 
-    # towerArray = df.AsNumpy(columns=["towers_noPU"])["towers_noPU"] # Shape 20k, 6400
-
     return df
 
 def _mask(x, eta):
     return x[np.abs(eta) <= 2.5]
 
 
-def add_seed_and_truth_vectors(df, sample_name, thresholds):
+def add_seed_and_truth_vectors(df, sample_name):
     if 'Zee' in sample_name:
         selectCol = "towers_noPU"
     else:
@@ -102,8 +92,6 @@ def add_seed_and_truth_vectors(df, sample_name, thresholds):
     # p0 is at select_pix % 64
 
     df = df.Define("select_seed_pix", _eta_pt_mask_pix, ["select_pix", "towers"])
-
-
     # df = df.Define("sum_select_seed_pt", _select_sum, ["select_seed_pix", "towers"])
     # print(df.Sum("sum_select_seed_pt").GetValue()) 
     # # Prints 305299.29713344574 for zee, which is what we want!
@@ -130,25 +118,6 @@ def add_seed_and_truth_vectors(df, sample_name, thresholds):
 
         df = df.Define("truth_seed_pt", _pt_at_pix, ["truth_pix", "towers_noPU"])
 
-    # lo = np.asarray([x[0] for x in thresholds])
-    # hi = np.asarray([x[1] for x in thresholds])
-    # n_bins = len(thresholds)
-    # last = n_bins - 1
-    # def _seed_bin_counts(pt):
-    #     counts = np.zeros(n_bins, dtype=np.int64)
-    #     for v in pt:
-    #         for b in range(n_bins):
-    #             if b == last:
-    #                 in_bin = (v >= lo[b]) and (v <= hi[b])
-    #             else:
-    #                 in_bin = (v >= lo[b]) and (v < hi[b])
-
-    #             if in_bin:
-    #                 counts[b] += 1
-    #                 break
-    #     return counts
-    # df = df.Define("seed_bin_counts", _seed_bin_counts, ["dropped_seed_pt"])
-    
     df = df.Define("seed_x_bank", _seed_x_bank, ["dropped_seed_pix", "towers"])
 
     return df
@@ -215,7 +184,7 @@ def _drop_overlapping(seed_pix, towers):
             out[k] = seed_pix[i]
             k += 1
 
-    return out    
+    return out
 
 def _pt_at_pix(seed_pix, towers):
     return towers[N_CH * seed_pix]

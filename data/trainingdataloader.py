@@ -53,8 +53,6 @@ class OpenDataSet():
 
         training_tower_dist, training_pt_dist = filter_training(loaders, towers_dict, self.thresholds)
 
-        print("JZ towers:", training_tower_dist["JZ"].shape)
-        print("Zee towers:", training_tower_dist["Zee"].shape)
 
         X_bkg = training_tower_dist['JZ'] 
 
