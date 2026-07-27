@@ -33,6 +33,7 @@ fi
 # activate conda
 source ${CONDA_INSTALL}/bin/activate
 # create conda environment
+conda install -c conda-forge root
 conda env create -f requirements.yaml
 conda activate $CONDA_ENV_NAME
 # always export the framework paths
