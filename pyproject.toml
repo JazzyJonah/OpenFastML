@@ -5,7 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ofml"
 version = "0.0.1"
+requires-python = ">=3.10,<3.11"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["fastml*", "data*", "egammaCNN*"]
+include = [
+    "fastml*",
+    "egammaCNN*",
+    "Root*",
+]

@@ -6,6 +6,12 @@ CONDA_ENV_NAME=fastml4jets
 # install miniforge locally if it doesn't already exist
 CONDA_INSTALL=$PWD/conda/
 
+
+REPO_ROOT="$(
+    cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1
+    pwd
+)"
+
 if [[ ! -d "${CONDA_INSTALL}" ]]; then
   CONDA_REPOSITORY=https://github.com/conda-forge/miniforge/releases/latest/download
   # installation for macOS (including support for M1 MacBooks)
@@ -35,5 +41,15 @@ source ${CONDA_INSTALL}/bin/activate
 # create conda environment
 conda env create -f requirements.yaml
 conda activate $CONDA_ENV_NAME
+
+if [[ -z "$REPO_ROOT" || ! -f "$REPO_ROOT/pyproject.toml" ]]; then
+    echo "Could not locate the OpenFastML repository." >&2
+    echo "REPO_ROOT='$REPO_ROOT'" >&2
+    return 1
+fi
+
+echo "Installing OpenFastML from: $REPO_ROOT"
+python -m pip install --editable "$REPO_ROOT" --no-deps
+
 # always export the framework paths
 export PATH=${CONDA_INSTALL}/envs/${CONDA_ENV_NAME}/bin:$PATH

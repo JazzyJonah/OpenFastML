@@ -4,6 +4,6 @@ __pycache__/
 .vscode/
 conda/
 .env
-*.dat
 raw_data/
-data/trueTesting.py
+.venv/
+*.egg-info

@@ -4,10 +4,14 @@ channels:
   - defaults
   - pip
 dependencies:
-  - python==3.10
+  - python=3.10
+  - root>6.40
   - pip
   - pip:
-      - tensorflow[and-cuda]==2.14.1
+      - numpy==1.26.4
+      - tensorflow==2.14.1
+      - keras==2.14.0
+      - keras-tuner==1.4.8
       - qkeras
       - awkward
       - matplotlib
@@ -25,5 +29,4 @@ dependencies:
       - fastjet
       - numba
       - mplhep
-      - keras-tuner
       - statsmodels

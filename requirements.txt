@@ -1,0 +1,27 @@
+# ABI-sensitive core stack
+numpy==1.26.4
+tensorflow==2.14.1
+keras==2.14.0
+keras-tuner==1.4.8
+
+# PyPI package version 0.1a12 contains CERN ROOT 6.40
+root==0.1a12
+
+qkeras
+awkward
+matplotlib
+scikit-learn
+pyarrow
+pandas
+uproot
+vector
+ipykernel
+xgboost
+scikit-image
+pre-commit
+jupyterlab
+hls4ml
+fastjet
+numba
+mplhep
+statsmodels

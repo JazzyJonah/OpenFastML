@@ -1,5 +1,6 @@
 import os
 import ROOT
+ROOT.gROOT.SetBatch(True)
 import numpy as np
 import json
 
