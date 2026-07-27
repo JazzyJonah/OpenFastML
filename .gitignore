@@ -6,4 +6,6 @@ conda/
 .env
 raw_data/
 .venv/
+.uv-bin/
+.uv-python/
 *.egg-info
