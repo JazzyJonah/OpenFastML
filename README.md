@@ -21,7 +21,7 @@ There are four sub-workflows in this repository: `/Original`, `/Root`, `/Hybrid`
 
 ## Running ROOTFastML
 
-In order to run ROOTFastML, first create a Conda virtual environment from `setup.sh`. It will install all modules in `requirements.yaml`, as well as ROOT.
+In order to run ROOTFastML, `cd` into the outer directory (likely `OpenFastML`). Then, run `source setup.sh`. This installs all requirements for running the workflow, including ROOT!
 
 To run the preprocessing script, run the relevant package from the outer directory, e.g., `python -m Original.Preprocessing.trainingdataloader`. **NOTE:** the training script requires raw open data, that is too large to fit on GitHub. To run the preprocessing, there must be a `raw_data` folder in the workflow folder, containing a `zee` and `jz` folder, each containing at least `events0k_10k.root` and `events0k_10k_noPU.root`. The preprocessing script generates processed data in the `Data` folder, and this processed data is already there by default. **WARNING:** rerunning the preprocessing script will overwrite your data, lest you pass a different file path as the `save_path` argument(s).
 
