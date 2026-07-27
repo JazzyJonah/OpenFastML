@@ -52,6 +52,8 @@ def filter_training(loaders, towers_dict, thresholds):
 
     rng = np.random.default_rng(123) 
 
+    print(f"counts shape: {smoothed_target.shape}")
+
     training_pt_dist_lists = {s: [] for s in samples}
     training_tower_dist_lists = {s: [] for s in samples}
 

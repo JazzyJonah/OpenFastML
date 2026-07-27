@@ -4,7 +4,7 @@
         "hstp_filter_sf"   : 1.0,
         "filter_eff" : 1.0,
         "pid"       : 11,
-        "dir"       : "/workspace/samples/open_data/zee/delphes_gen/",
+        "dir"       : "raw_data/zee/",
         "name"      : "Z-->ee"
     },
 
@@ -13,7 +13,7 @@
         "hstp_filter_sf"   : 1.0,
         "filter_eff" : 1.0,
         "pid"       : "None",
-        "dir"       : "/workspace/samples/open_data/jz/delphes_gen/",
+        "dir"       : "raw_data/jz/",
         "name"      : "JZ"
     }
 }

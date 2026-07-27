@@ -1,10 +1,9 @@
 import vector
 from fastml.utils_egamma.efex import *
-from fastml.utils.misc import get_config
 from fastml.utils.image import vector_to_tower, pad, sliding_window
 from fastml.utils_egamma.misc import get_open_data
 
-from data.opendatahelper import drop_overlapping
+from data.opendatahelper import get_config, drop_overlapping
 
 class OpenDataLoader:
     def __init__(self, 
@@ -89,17 +88,32 @@ class OpenDataLoader:
             "phi": phi,
             "m": 0,
         })
+        # print(f"[OPEN] [{self.sample_name}] pre-mask count: {ak.count(seed_vectors.rho)}")
+        # print(f"[OPEN] [{self.sample_name}] pre-mask sum: {sum(seed_vectors.rho.layout.content)}")
 
         seed_vectors_mask = self._eta_pt_mask(seed_vectors, min_pt = 10)
         seed_vectors = seed_vectors[seed_vectors_mask]
+        # print(f"[OPEN] [{self.sample_name}] eta pt mask count: {ak.count(seed_vectors.rho)}")
+        # print(f"[OPEN] [{self.sample_name}] eta pt mask sum:   {sum(seed_vectors.rho.layout.content)}")
+        # print(sum(seed_vectors.rho.layout.content)) 
+        # # 305299.29713344574 for Zee, 1544637.4683074951 for jz 
+        # #         Is JZ close enough? ^Might have some VERY minor differences
+        
         self.seed_vectors = seed_vectors[drop_overlapping(seed_vectors)]
-
+        # print(f"[OPEN] [{self.sample_name}] drop overlapping count: {ak.count(self.seed_vectors.rho)}")
+        # print(f"[OPEN] [{self.sample_name}] drop overlapping sum:   {sum(self.seed_vectors.rho.layout.content)}")
+        # print(sum(self.seed_vectors.rho.layout.content)) 
+        # # 302135.3477334976 for zee, 1316729.164387703 for jz
+        
         if 'Zee' in self.sample_name:
             truth_pt = self.towers_noPU[ev_ids, e0, p0, 0]
             truth_pt = ak.unflatten(truth_pt[sorted_idx], counts)
             truth_vectors = self._load_truthdata(truth_pt, eta, phi)
             truth_vectors = truth_vectors[seed_vectors_mask]
             self.truth_vectors = truth_vectors[drop_overlapping(truth_vectors)]
+            
+            # print(sum(self.truth_vectors.rho.layout.content))
+            # # 295083.5315389633
 
     def _load_truthdata(self, truth_pt, eta, phi):
         return vector.zip({
