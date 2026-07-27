@@ -1,5 +1,6 @@
 import numpy as np
 import awkward as ak
+import json
 from fastml.utils_egamma.efex import eFex_slidingwindow_mask
 from fastml.utils.image import sliding_window
 
@@ -7,6 +8,9 @@ eta_edges=np.linspace(-2.5, 2.5, 51)
 phi_edges=np.linspace(-np.pi, np.pi, 65)
 n_eta = len(eta_edges) - 1
 n_phi = len(phi_edges) - 1
+
+def get_config(sample):
+    return json.load(open("Preprocessing/configs/samples.json"))[sample]
 
 def get_jagged_towers(towers, fex, ev_ids, ok):
     n_per_evt = ak.to_numpy(ak.num(fex, axis=1))

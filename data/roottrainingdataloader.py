@@ -10,24 +10,40 @@ from trainingdatahelper import calculate_weights
 
 import awkward as ak
 import numpy as np
-from time import time, sleep
+from time import time
+from sklearn.model_selection import train_test_split
 
 class RootDataSet(OpenDataSet):
+    def __init__(self, mode="singular"):
+        super().__init__()
+        self.mode = mode
     def load_raw_data(self) -> None:
         samples = ["Zee", "JZ"]
         self.loaders: dict[str, RootDataLoader] = {}
 
         for sample_name in samples:
             dl = RootDataLoader(sample_name)
-            stop = 2 if 'Zee' == sample_name else 1
+            stop = 3 if 'Zee' == sample_name else 2
 
             dl.load(n_start=0, n_stop=stop)
 
             self.loaders[sample_name] = dl
+    # def trigger_raw_data(self, t) -> None:
+    #     samples = ["Zee", "JZ"]
+    #     for sample_name in samples:
+    #         dl = self.loaders[sample_name].df
+    #         a = dl.Sum("dropped_seed_pix")
+    #         b = dl.Sum("dropped_seed_pt")
+    #         c = dl.Sum("seed_x_bank")
+    #         a.GetValue()
+    #         print(f"[{time()-t:.2f}] [{sample_name}] Triggered dropped_seed_pix Sum")
+    #         b.GetValue()
+    #         print(f"[{time()-t:.2f}] [{sample_name}] Triggered dropped_seed_pt Sum")
+    #         c.GetValue()
+    #         print(f"[{time()-t:.2f}] [{sample_name}] Triggered seed_x_bank Sum")
     
 
-    def load(self) -> None:
-        t = time()
+    def load(self, t) -> None:
         self.load_raw_data()
         print(f"[{time()-t:.2f}] Loaded raw data")
 
@@ -59,21 +75,29 @@ class RootDataSet(OpenDataSet):
         print(f"[{time()-t:.2f}] Converted selected binned RDataFrame to Awkward")
 
         self.final_seed_table = self.make_final_seed_table()
+        print(f"[ROOT] final X shape: {self.final_seed_table.x.type}")
         print(f"[{time()-t:.2f}] Made final seed table")
 
         self.final_df = self.make_final_df()
         print(f"[{time()-t:.2f}] Made final RDataFrame")
     
 
-    def save_to_root(self, savepath, treename="tree") -> None:
-        self.final_df.Display().Print()
-        sleep(10)
+    def save_to_root(self, savepath, t, treename="tree", otherpath=None) -> None:
+        
+        # sleep(10)
         try:
-            self.final_df.Snapshot(treename, savepath)
+            if self.mode == "singular":
+                self.final_df.Display().Print()
+                self.final_df.Snapshot(treename, savepath)
+            else:
+                self.final_df[0].Display().Print()
+                self.final_df[0].Snapshot(treename, savepath)
+                self.final_df[1].Display().Print()
+                self.final_df[1].Snapshot(treename, otherpath)
             print("Worked")
         except:
             print("Poo")
-        print(f"Saved final data to {savepath}! Whoo!")
+        print(f"[{time()-t:.2f}] Saved final data to {savepath}! Whoo!")
     
     
     def convert_loaders_to_awkward(self) -> dict[str, ak.Array]:
@@ -168,6 +192,8 @@ class RootDataSet(OpenDataSet):
 
         sig_pt = ak.flatten(arr.final_signal_pt, axis=1)
         bkg_pt = ak.flatten(arr.final_background_pt, axis=1)
+        print(sig_pt.type, bkg_pt.type)
+        exit()
         sig_w = calculate_weights(sig_pt, self.bin_edges)
         bkg_w = calculate_weights(bkg_pt, self.bin_edges)
 
@@ -185,13 +211,38 @@ class RootDataSet(OpenDataSet):
         return ak.concatenate([sig_table, bkg_table], axis=0)
     
     def make_final_df(self):
-        return ak.to_rdataframe({
-            "x": self.final_seed_table.x,
-            "y": self.final_seed_table.y,
-            "w": self.final_seed_table.w
-        })
+        if self.mode == "singular":
+            return ak.to_rdataframe({
+                "x": self.final_seed_table.x,
+                "y": self.final_seed_table.y,
+                "w": self.final_seed_table.w
+            })
+        elif self.mode == "split":
+            x_train, x_val, y_train, y_val, w_train, w_val = train_test_split(
+                self.final_seed_table.x,
+                self.final_seed_table.y,
+                self.final_seed_table.w,
+                test_size=0.2,
+                random_state=101
+            )
+            df_train = ak.to_rdataframe({
+                "x_train": x_train,
+                "y_train": y_train,
+                "w_train": w_train
+            })
+            df_val = ak.to_rdataframe({
+                "x_val": x_val,
+                "y_val": y_val,
+                "w_val": w_val
+            })
+            return df_train, df_val
+
 
 if __name__ == "__main__":
-    rds = RootDataSet()
-    rds.load()
-    rds.save_to_root("raw_data/processed_root_data.root")
+    rds = RootDataSet("singular")
+    t = time()
+    pth = "/home/student2/ofml_workspace/OpenFastML/train_data/temp_train.root"
+    otherpth = "/home/student2/ofml_workspace/OpenFastML/train_data/temp_val.root"
+    rds.load(t)
+    rds.save_to_root(pth, t=t, otherpath=otherpth)
+    print(f"[{time()-t:.2f}] Saved final data to {pth}")

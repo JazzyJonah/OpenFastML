@@ -1,163 +1,48 @@
-# OpenEGammaCNN
+# ROOTFastML
 
-Fast machine learning with QKeras for electron and photon classification using open calorimeter data. This project trains a quantised convolutional neural network to classify electron and photon signal objects against jet background objects using small calorimeter-tower images. The model is designed to be lightweight and suitable for fast inference studies.
+## Workflow description
+`ROOTFastML` is a fork of [OpenFastML](https://github.com/solarisu/OpenFastML) that converts the preprocessing and training to a ROOT-native workflow.
 
-Run source setup.sh. This will install a light-weight version of conda and along with all dependencies conda activate fastml4jets sets up the environment for this repository.
+`OpenEGammaCNN` is a workflow that generates a `QKeras` model for proton and photon classification (the two classes are `signal` and `background`). The model is a lightweight FastML Quantised CNN, with a non-trainable symmetric pooling layer, a depthwise 2D convolutional layer, a ReLU activation, a dense layer, and then a sigmoid activation. The input to the model is shape `(3, 3, 2)`, or `(`3 towers in $\eta$, 3 towers in $\phi$, 2 carolimeter layers (`EM` and `HAD`)`)`, with $|\eta|<2.5, |\phi|<\pi$. The output will be between 0 and 1, because of the sigmoid function, with 0 corresponding to `background` and 1 corresponding to `signal`.
 
-This repository uses the fastml package for fast tower building and CNN layers (https://cds.cern.ch/record/2941096)
+The first layer applies [symmetric pooling using non-trainable convolutions](https://github.com/solarisu/OpenFastML/blob/main/fastml/modules/layers.py#L83). This applies three symmetric `3 x 3` convolution patterns in the eta-phi plane. The output shape is `(1, 1, 2, 3)`, or `(`1, 1, 2 calorimeter layers, 3 symmetric pooling outputs`)`. Then, this is passed to the [dense depthwise 2D convolutional layer](https://qkerasv3.readthedocs.io/en/stable/api/generated/qkeras.qlayers.html#qkeras.qlayers.QDense), which applies a fully connected matrix of shape `(3, y)` for each calorimeter, where `y` is the depth multiplicity, a tuneable hyperparameter. At this point, we have a shape `(1, 1, 2*y)`. Then, we apply a ReLU [activation function](https://qkerasv3.readthedocs.io/en/stable/api/generated/qkeras.qlayers.html#qkeras.qlayers.QActivation), which flattens it to pass it to a final dense layer of shape `(24,1)`. The final output is passed to a sigmoid activation function, giving it a classifier score in $[0,1]$.
 
-## Overview
+All the hyperparameters are tuned by a [KerasTuner random search](https://keras.io/keras_tuner/api/tuners/random/). Here are all the tuneable hyperparameters:
+| Hyperparameter    | Default Value      |
+| ----------------- | ------------------ |
+| `depth_mult`      | $4$                |
+| `conv_precision`  | $12$               |
+| `dense_precision` | $12$               |
+| `learning_rate`   | $5\mathrm{e}{-4}$ |
 
-The input data consists of calorimeter tower images constructed from simulated events with pile-up corresponding to a 200 pile-up scenario. Each seed is represented as a small calorimeter image centred on a selected tower. The model uses these images to distinguish signal-like electron and photon objects from background-like jet activity.
+The training setup consists of 45 epochs, a Binary Cross Entropy loss function, and an Adam optimizer.
 
-The final classifier outputs a value between 0 and 1:
+There are four sub-workflows in this repository: `/Original`, `/Root`, `/Hybrid`, and `/Root_single`. The `Original` workflow is an exact copy of `OpenFastML`: the preprocessing pulls the `.root` data with `uproot`, does the preprocessing with `AwkwardArray`, and then saves the processed data as `train.parquet` and `val.parquet`. The `ROOT` workflow pulls the `.root` data with `RDataFrame`, does the preprocessing with `RDataFrame`, and then snapshots the processed data as `train.root` and `val.root`. The `Hybrid` workflow does the preprocessing the same as the `Original` workflow, but uses `ak.to_rdataframe` to convert the final arrays to `RDataFrame`. Then, it snapshots to `train.root` and `val.root`. The `ROOT_single` workflow does the preprocessing the same as the `ROOT` workflow, but doesn't do the train-test-split, and instead saves it as just `processed.root`. The training scripts in each workflow reflect the output formats of their respective preprocessing scripts.
 
-* `1`: signal-like seed
-* `0`: background-like seed
+## Running ROOTFastML
 
-## Data Format
+In order to run ROOTFastML, first create a Conda virtual environment from `setup.sh`. It will install all modules in `requirements.yaml`. Then, install ROOT (from source or otherwise).
 
-The dataset is built from calorimeter towers. Each tower corresponds to a coarse region of 0.1 x 0.1 in eta-phi. The towers span the detector region: |eta| < 2.5, |phi| < pi.
+To run the preprocessing script, run the relevant package from the outer directory, e.g., `python -m Original.Preprocessing.trainingdataloader`. **NOTE:** the training script requires raw open data, that is too large to fit on GitHub. To run the preprocessing, there must be a `raw_data` folder in the workflow folder, containing a `zee` and `jz` folder, each containing at least `events0k_10k.root` and `events0k_10k_noPU.root`. The preprocessing script generates processed data in the `Data` folder, and this processed data is already there by default. **WARNING:** rerunning the preprocessing script will overwrite your data, lest you pass a different file path as the `save_path` argument(s).
 
-Each tower contains energy deposits in two calorimeter layers:
+To run the training script, again run the relevant package from the outer directory, e.g., `python -m Original.Training.train_qcnn`. The training script generates a model in the `Models` folder, and the baseline model is already there by default. **WARNING:** rerunning the training script will overwrite your data, lest you pass a different file path as the `save_path` argument. By default, the model will be saved to `Models/model_{batchsize}.keras`. Furthermore, the default seed argument is that which produced the best results in the seed tuning. 
 
-* Electromagnetic layer, `EM`
-* Hadronic layer, `HAD`
+All benchmarks are located in the `Benchmarks/` folder. The `test_models.ipynb` notebook has all benchmarks that present our plots. Some benchmarks require the use of models. For these, there's a cell that defines the two models that will be compared in the benchmarks. Furthermore, some benchmarks require the use of pregenerated analysis data. This data is present in the `Data` folder, but to recreate it, run the analysis packages from the outer directory (e.g., `python -m Benchmarks.preprocessing_time`). **WARNING:** running the analysis scripts will overwrite the data, lest you pass a different file path as the `save_path` argument.
 
-The CNN input is a local image made from 3 x 3 x 2 calorimeter towers where:
+## Results
+**NOTE:** Unless otherwise specified, these curves compare the `Original` workflow with the `Root` workflow, using the default parameters in each workflow's `trainingdataloader.py` and `train_qcnn.py` files. This includes optimized seeds.
 
-* `3` towers are used in eta
-* `3` towers are used in phi
-* `2` calorimeter layers are used: EM and HAD
+Here's the receiver operating characteristic (ROC) curve, comparing the two models. 
+![](https://codimd.web.cern.ch/uploads/upload_177f381d62527d951ebba4b26d5f101f.png)
 
-Therefore, each input seed has shape (3, 3, 2).
+Here's the AU curve, comparing signal and background efficiency. (An event near 0 suggests the model is confident the event is background, whereas an event near 1 suggests the model is confident the event is signal).
+![](https://codimd.web.cern.ch/uploads/upload_0e78981999e31bf57d856b8e1cfd3dae.png)
 
-## Seed Definition
+Here's a table documenting each workflow's preprocessing time and 100-trains time:
+| Workflow | 100 Training runs (s) | Preprocessing |
+| -------- | --------------------- | ------------- |
+| Original | 600.501               | 3m28.43s      |
+| Root     | 278.216               | 4m51.80s      |
 
-A seed is a local calorimeter image centred on a tower that satisfies the signal or background selection criteria.
-
-A four-momentum-like coordinate convention is used for each seed:
-
-```text
-ET  = central tower transverse energy in the EM layer
-eta = central tower eta
-phi = central tower phi
-m   = 0
-```
-
-Signal seeds are built from the simulated `Z -> ee` sample. For the signal sample, the central tower is selected from towers that have non-zero energy in the electromagnetic layer in the corresponding zero pile-up sample.
-
-Background seeds are built from the simulated JZ sample. For the background sample, the central tower must satisfy EM ET > 10 GeV in the 200 pile-up sample.
-
-For both signal and background samples, a mask is applied to ensure that selected `3 x 3 x 2` seed images do not overlap.
-
-The resulting non-overlapping images are referred to as seeds.
-
-## CNN Architecture
-
-The CNN performs symmetric depthwise convolutions on the input images. The input shape is (3, 3, 2). The first layer performs symmetric pooling using non-trainable convolutions. This layer applies three symmetric `3 x 3` convolution patterns in the eta-phi plane. The output shape is: (1, 1, 2, 3) where:
-
-* `2` corresponds to the two calorimeter layers
-* `3` corresponds to the three symmetric pooling outputs
-
-The pooled outputs are passed to a dense layer. For each calorimeter layer, a fully connected matrix of shape (3, y) is applied, where y = depth multiplicity. The depth multiplicity is a tunable hyperparameter. The output shape after this stage is (1, 1, 2 * y). The output is then passed through a ReLU activation function. The ReLU output is passed to a final dense layer with shape (24, 1). The final output is passed through a sigmoid activation function, giving a classifier score in the range [0, 1].
-
-All trainable layers are quantised using QKeras. The convolution and dense layer precisions are treated as hyperparameters:
-
-```text
-conv_precision
-dense_precision
-```
-
-The ReLU precision is set to match the convolution precision. The bit precision is defined as:
-
-```text
-bits = precision_hyperparameter
-integer = precision_hyperparameter // 2
-```
-## Training Dataset Construction
-
-Training uses:
-
-```text
-20,000 signal events
-10,000 background events
-```
-
-From these events, `3 x 3 x 2` seed images are constructed. Signal seeds from the `Z -> ee` sample are labelled as `1`. Background seeds from the JZ sample are labelled as `0`.
-
-The dataset is balanced in seed transverse energy. For each seed `ET` bin between 10 GeV < ET < 40 GeV, the number of signal and background seeds is matched. This prevents the model from learning only the difference in the seed `ET` distributions between signal and background.
-
-After balancing, each seed is assigned a weight using an exponential spline function. The purpose of this weighting is to prioritise lower-`ET` seeds during training, since these seeds are more important for low-threshold trigger performance.
-
-The selected seeds are split into training and validation samples using an 80-20 split. The training data is saved as train_data.parquet with the following fields:
-
-```text
-x_train : seed images with shape (3, 3, 2)
-y_train : binary labels, 0 or 1
-w_train : seed weights
-```
-
-The validation data follows the same convention:
-
-```text
-x_val : validation seed images
-y_val : validation labels
-w_val : validation weights
-```
-
-Signal and background seeds in the training sample are augmented by a factor of 4. This is done by mirroring the seed images in eta and phi. The corresponding labels and weights are augmented in the same way. The validation sample is not augmented. Both the training and validation samples are batched with batch_size = 512
-
-The baseline model is trained using the following configuration:
-
-```json
-{
-  "depth_mult": 4,
-  "conv_precision": 12,
-  "dense_precision": 12,
-  "learning_rate": 5e-4
-}
-```
-
-The training setup is:
-
-```text
-epochs = 45
-loss = Binary Cross Entropy
-optimizer = Adam
-```
-
-
-Hyperparameter tuning is performed over the model hyperparameters. The tunable parameters include:
-
-```text
-depth_mult
-conv_precision
-dense_precision
-learning_rate
-```
-
-The tuner trains each trial using the same training setup as the baseline model:
-
-```text
-epochs = 45
-loss = Binary Cross Entropy
-optimizer = Adam
-```
-
-The number of random hyperparameter trials is specified by the user. The baseline and the best tuned model are saved in `.keras` format.
-
-## Testing Data
-
-The test dataset is stored in two separate Parquet files: test_signal.parquet and test_background.parquet. Each file is saved as an event-structured Awkward Array. The structure is:
-
-```text
-N events -> y seeds per event
-```
-
-where:
-
-* `N` is the number of events
-* `y` is the variable number of selected seeds in each event
-
-Each seed contains two fields: image and seed_info. The `image` field contains the calorimeter seed image associated with each selected seed. The `seed_info` field contains the four-momentum information of the seed. Therefore, each entry in the test dataset links one seed image to its corresponding seed-level kinematic information.
+Here's how long each training epoch took each model. Since the individual epochs are very variable, these are the averages of 50 full trainings of each model. Note that for both models, the first epoch takes much longer than the rest.
+![](https://codimd.web.cern.ch/uploads/upload_0ee617c64989132fa26c2123c2a01b3b.png)

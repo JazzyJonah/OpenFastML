@@ -92,22 +92,25 @@ def add_seed_and_truth_vectors(df, sample_name):
     # p0 is at select_pix % 64
 
     df = df.Define("select_seed_pix", _eta_pt_mask_pix, ["select_pix", "towers"])
-    # df = df.Define("sum_select_seed_pt", _select_sum, ["select_seed_pix", "towers"])
-    # print(df.Sum("sum_select_seed_pt").GetValue()) 
-    # # Prints 305299.29713344574 for zee, which is what we want!
-    # # Prints 1544621.4271774292 for jz; slightly off
 
     df = df.Define("dropped_seed_pix", _drop_overlapping, ["select_seed_pix", "towers"])
-    
-    # df = df.Define("sum_dropped_seed_pt", _select_sum, ["dropped_seed_pix", "towers"])
-    # print(df.Sum("sum_dropped_seed_pt").GetValue())
-    # # Prints 302164.2581586838 for zee, which is almost exactly correct 
-    # # (I'll chalk it to a rounding error that was present in the 
-    # # original code that could cause bad things to happen)
-    # # Prints 1544621.4271774292 for jz; slightly off
 
+    df = df.Define("select_pt", _pt_at_pix, ["select_pix", "towers"])
+    df = df.Define("select_seed_pt", _pt_at_pix, ["select_seed_pix", "towers"])
     df = df.Define("dropped_seed_pt", _pt_at_pix, ["dropped_seed_pix", "towers"])
-
+    
+    ### DEBUGGING DEBUGGING DEBUGGING ###
+    # akArray = ak.from_rdataframe(
+    #     df,
+    #     columns=["select_pix", "select_seed_pix", "dropped_seed_pix", "select_pt", "select_seed_pt", "dropped_seed_pt"]
+    # )
+    # print(f"[ROOT] [{sample_name}] select seed pix count:  {ak.count(akArray.select_pix)}")
+    # print(f"[ROOT] [{sample_name}] select seed pix sum:    {sum(akArray.select_pt.layout.content)}")
+    # print(f"[ROOT] [{sample_name}] eta pt mask count:      {ak.count(akArray.select_seed_pix)}")
+    # print(f"[ROOT] [{sample_name}] eta pt mask sum:        {sum(akArray.select_seed_pt.layout.content)}")
+    # print(f"[ROOT] [{sample_name}] drop overlapping count: {ak.count(akArray.dropped_seed_pix)}")
+    # print(f"[ROOT] [{sample_name}] drop overlapping sum:   {sum(akArray.dropped_seed_pt.layout.content)}")
+    ### DEBUGGING DEBUGGING DEBUGGING
     
     if sample_name == "Zee": # I don't think this is ever used.
         df = df.Define("truth_pix", _drop_overlapping, ["select_seed_pix", "towers_noPU"])
@@ -140,18 +143,42 @@ def _eta_pt_mask_pix(select_pix, towers):
 
     return select_pix[mask]
 
+ETA_IX_MAP_OPEN = np.array([
+    0, 1, 2, 3, 4, 4, 6, 7, 7, 9,
+    10, 11, 12, 12, 14, 15, 16, 17, 18, 19,
+    20, 21, 21, 23, 24, 24, 25, 26, 28, 28,
+    29, 30, 31, 32, 33, 34, 35, 37, 37, 38,
+    39, 40, 42, 42, 43, 44, 45, 46, 47, 48
+], dtype=np.int64)
+
+PHI_IX_MAP_OPEN = np.array([
+    0, 1, 2, 3, 4, 5, 6, 7,
+    8, 9, 10, 11, 12, 13, 14, 15,
+    16, 17, 18, 19, 20, 21, 22, 23,
+    24, 25, 26, 27, 28, 29, 30, 31,
+    31, 32, 33, 34, 35, 36, 37, 38,
+    39, 40, 41, 42, 43, 44, 45, 46,
+    47, 48, 49, 50, 51, 52, 53, 54,
+    55, 56, 57, 58, 59, 60, 61, 62
+], dtype=np.int64)
+
 def _drop_overlapping(seed_pix, towers):
     m = len(seed_pix)
 
     if m == 0:
         return np.empty(0, dtype=np.int64)
 
-    keep = np.ones(m, dtype=np.bool_)
+    mask = np.ones(m, dtype=np.bool_)
 
     for i in range(m):
         pix_i = seed_pix[i]
-        e_i = pix_i // 64
-        p_i = pix_i % 64
+
+        raw_e_i = pix_i // 64
+        raw_p_i = pix_i % 64
+
+        e_i = ETA_IX_MAP_OPEN[raw_e_i]
+        p_i = PHI_IX_MAP_OPEN[raw_p_i]
+
         pt_i = towers[2 * pix_i]
 
         for j in range(m):
@@ -159,32 +186,30 @@ def _drop_overlapping(seed_pix, towers):
                 continue
 
             pix_j = seed_pix[j]
-            e_j = pix_j // 64
-            p_j = pix_j % 64
 
-            if abs(e_i - e_j) > 2 or abs(p_i - p_j) > 2:
+            raw_e_j = pix_j // 64
+            raw_p_j = pix_j % 64
+
+            e_j = ETA_IX_MAP_OPEN[raw_e_j]
+            p_j = PHI_IX_MAP_OPEN[raw_p_j]
+
+            de = np.abs(e_i - e_j)
+            dp = np.abs(p_i - p_j)
+
+            # phi wraps with 64 physical bins, even though mapped p only reaches 62
+            if dp > 32:
+                dp = 64 - dp
+            if de > 2 or dp > 2:
                 continue
 
             pt_j = towers[2 * pix_j]
 
+            # first max wins
             if pt_j > pt_i or (pt_j == pt_i and j < i):
-                keep[i] = False
+                mask[i] = False
                 break
 
-    n_keep = 0
-    for i in range(m):
-        if keep[i]:
-            n_keep += 1
-
-    out = np.empty(n_keep, dtype=np.int64)
-
-    k = 0
-    for i in range(m):
-        if keep[i]:
-            out[k] = seed_pix[i]
-            k += 1
-
-    return out
+    return seed_pix[mask]
 
 def _pt_at_pix(seed_pix, towers):
     return towers[N_CH * seed_pix]

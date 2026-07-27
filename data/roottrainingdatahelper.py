@@ -91,6 +91,7 @@ def add_smooth_raw_targets(df):
     
     df = df.Define("bin_idx", "static_cast<int>(rdfentry_)")
     df = df.Define("smoothed_target", _make_smoothed_target, ["raw_target", "bin_idx"])
+    
     return df
 def _min(n_1, n_2):
     return min(n_1, n_2)
