@@ -101,7 +101,7 @@ fi
 source "${VENV_DIR}/bin/activate"
 hash -r
 
-python -m pip install --upgrade pip setuptools wheel
+python -m pip install --upgrade pip
 python -m pip install --requirement "${REPO_ROOT}/requirements.txt"
 python -m pip install --editable "${REPO_ROOT}" --no-deps
 
