@@ -6,9 +6,9 @@ from fastml.utils_egamma.efex import eFex_slidingwindow_mask
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from .dataloader import OpenDataLoader
-from .datahelper import *
-from .trainingdatahelper import *
+from Hybrid.Preprocessing.dataloader import OpenDataLoader
+from Hybrid.Preprocessing.datahelper import *
+from Hybrid.Preprocessing.trainingdatahelper import *
 
 
 class OpenDataSet():

@@ -3,7 +3,7 @@ from fastml.utils_egamma.efex import *
 from fastml.utils.image import vector_to_tower, pad, sliding_window
 from fastml.utils_egamma.misc import get_open_data
 
-from .datahelper import get_config, drop_overlapping
+from Original.Preprocessing.datahelper import get_config, drop_overlapping
 
 class OpenDataLoader:
     def __init__(self, 

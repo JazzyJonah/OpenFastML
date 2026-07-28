@@ -1,5 +1,5 @@
-from .dataloader import RootDataLoader
-from .trainingdatahelper import (_group_sample_into_threshold_bins,
+from Root.Preprocessing.dataloader import RootDataLoader
+from Root.Preprocessing.trainingdatahelper import (_group_sample_into_threshold_bins,
                                     _convert_loader_to_awkward,
                                     _rechunk_seed_x,
                                     add_signal_background_counts,

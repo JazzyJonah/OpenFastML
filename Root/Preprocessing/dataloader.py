@@ -1,4 +1,4 @@
-from .datahelper import (get_config,
+from Root.Preprocessing.datahelper import (get_config,
                         get_root_data, 
                         add_towers, 
                         add_seed_and_truth_vectors)
